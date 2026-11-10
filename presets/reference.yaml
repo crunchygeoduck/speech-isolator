@@ -1,0 +1,45 @@
+name: reference
+description: Approved full-band speech isolation baseline for factory recordings.
+speech_isolation:
+  model: MossFormer2_SE_48K
+noise_suppression:
+  enabled: false
+  reduction_db: 0
+high_pass:
+  enabled: true
+  frequency: 45
+notch_filter:
+  enabled: false
+  auto_detect: false
+  max_filters: 0
+  max_reduction_db: 0
+  quality_factor: 12
+dereverb:
+  enabled: false
+  strength: 0.0
+eq:
+  enabled: true
+  mud_reduction_db: 0
+  presence_gain_db: -2.5
+  body_gain_db: 2.5
+  low_mid_gain_db: -1.2
+  air_gain_db: -3.5
+speech_texture_blend:
+  enabled: true
+  amount: 0.04
+  threshold: 0.04
+  ratio: 20
+  range: 0.001
+  attack_ms: 5
+  release_ms: 80
+compressor:
+  enabled: false
+  ratio: 1.0
+  threshold_db: -18
+  attack_ms: 20
+  release_ms: 160
+normalization:
+  enabled: true
+  target_lufs: -21
+  true_peak_db: -4
+  loudness_range: 11

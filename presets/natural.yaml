@@ -1,0 +1,37 @@
+name: natural
+description: Preserve natural voice with moderate isolation and minimal post-processing.
+speech_isolation:
+  strength: 0.50
+  attenuation_limit_db: 12
+  post_filter: false
+noise_suppression:
+  enabled: false
+  reduction_db: 3
+high_pass:
+  enabled: true
+  frequency: 75
+notch_filter:
+  enabled: false
+  auto_detect: true
+  max_filters: 2
+  max_reduction_db: 3
+  quality_factor: 10
+dereverb:
+  enabled: false
+  strength: 0.0
+eq:
+  enabled: true
+  mud_reduction_db: 1.0
+  presence_gain_db: 1.0
+compressor:
+  enabled: true
+  ratio: 2.0
+  threshold_db: -20
+  attack_ms: 20
+  release_ms: 180
+normalization:
+  enabled: true
+  target_lufs: -16
+  true_peak_db: -1.5
+  loudness_range: 11
+

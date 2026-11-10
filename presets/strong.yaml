@@ -1,0 +1,37 @@
+name: strong
+description: Default compromise between intelligibility and natural voice quality.
+speech_isolation:
+  strength: 0.72
+  attenuation_limit_db: 20
+  post_filter: true
+noise_suppression:
+  enabled: true
+  reduction_db: 4
+high_pass:
+  enabled: true
+  frequency: 80
+notch_filter:
+  enabled: false
+  auto_detect: true
+  max_filters: 3
+  max_reduction_db: 6
+  quality_factor: 12
+dereverb:
+  enabled: false
+  strength: 0.0
+eq:
+  enabled: true
+  mud_reduction_db: 1.5
+  presence_gain_db: 1.5
+compressor:
+  enabled: true
+  ratio: 2.5
+  threshold_db: -18
+  attack_ms: 20
+  release_ms: 160
+normalization:
+  enabled: true
+  target_lufs: -16
+  true_peak_db: -1.5
+  loudness_range: 11
+

@@ -1,0 +1,38 @@
+name: maximum
+description: Prioritize intelligibility; noticeable artifacts are possible.
+warning: Aggressive processing can cause metallic speech, dropouts, or pumping.
+speech_isolation:
+  strength: 0.95
+  attenuation_limit_db: 35
+  post_filter: true
+noise_suppression:
+  enabled: true
+  reduction_db: 8
+high_pass:
+  enabled: true
+  frequency: 90
+notch_filter:
+  enabled: false
+  auto_detect: true
+  max_filters: 3
+  max_reduction_db: 6
+  quality_factor: 12
+dereverb:
+  enabled: false
+  strength: 0.0
+eq:
+  enabled: true
+  mud_reduction_db: 2.0
+  presence_gain_db: 2.0
+compressor:
+  enabled: true
+  ratio: 3.0
+  threshold_db: -20
+  attack_ms: 15
+  release_ms: 150
+normalization:
+  enabled: true
+  target_lufs: -16
+  true_peak_db: -1.5
+  loudness_range: 10
+
