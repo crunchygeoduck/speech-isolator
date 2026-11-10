@@ -2,9 +2,9 @@
 
 Factory Speech Cleaner is a Windows desktop app for isolating speech in audio and video files. The dark Control Room combines a processing queue, a waveform preview, and synchronized A/B listening. Inference runs locally.
 
-## Windows portable build
+## Windows setup
 
-Download `Speech-Isolator-v0.1.0-Windows-x64.zip` from [Releases](https://github.com/crunchygeoduck/speech-isolator/releases), extract the whole archive to a writable folder, and open `FactorySpeechCleaner.exe`. The `_internal` folder contains the runtime and models. See `START_HERE.txt` for the listening and export workflow.
+Clone the repository or download the source ZIP from [Releases](https://github.com/crunchygeoduck/speech-isolator/releases). Follow the setup below to install the dependencies from their upstream providers, run the app, or build a portable Windows folder.
 
 Select a file or folder, choose a row, and use **Prepare preview** to listen at strength 50. Adjust strength while listening, then use **Clean files** to export the queue. Strength 0 makes an exact copy. The volume slider controls only playback.
 
