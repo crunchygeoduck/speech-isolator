@@ -8,7 +8,8 @@ Copy the WHOLE FactorySpeechCleaner folder to a writable location on the destina
 Windows PC. Keep the EXE and _internal folder together. Python is bundled.
 
 1. Open FactorySpeechCleaner.exe.
-2. Select audio/video files or a folder in Control Room.
+2. Add audio/video files or a folder in Control Room. Add again to extend
+   the queue, or use Remove selected to take out a recording.
 3. Choose a separate output folder and start with strength 50.
 4. Select a queue row and click Prepare preview. Press Play in Selected file,
    then adjust Cleanup strength. Pause briefly for each update.
@@ -20,13 +21,18 @@ Windows PC. Keep the EXE and _internal folder together. Python is bundled.
 Advanced options and technical logs are collapsed by default. Expand them only
 when needed. No files are automatically selected on startup.
 
+Ctrl+O adds files, Ctrl+P prepares a preview, and Ctrl+Space plays or pauses.
+Delete removes the selected row when the queue has keyboard focus.
+The app remembers playback volume and an existing destination folder.
+
 Detail recovery (experimental, slower) uses two local models to recover complementary
 speech detail. Enable it to try the independent-engine improvement. Leave it off for
 the accepted Reference baseline. A/B generation keeps Reference 50 available alongside
 the selected detail-engine version. Compare before using it on a full library.
 
 Audio sources export 48 kHz WAV. Video exports retain the original video stream.
-Strength 0 bypasses processing. Folder selection scans only that folder, not subfolders.
+Strength 0 bypasses cleanup. Audio-only mode still extracts a WAV.
+Folder selection scans only that folder, not subfolders.
 Existing exports are skipped unless Replace existing CLEAN files is enabled.
 Failures and fallback processing appear in the queue and session logs.
 Each new export includes a JSON report. Processing is local; media is not uploaded.

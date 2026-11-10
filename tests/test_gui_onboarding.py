@@ -7,9 +7,11 @@ from src import gui
 
 
 @pytest.fixture
-def window(monkeypatch):
+def window(monkeypatch, tmp_path):
     app = QApplication.instance() or QApplication([])
     monkeypatch.setattr(gui, "detect_hardware", lambda: {})
+    settings = gui.QSettings(str(tmp_path / "settings.ini"), gui.QSettings.Format.IniFormat)
+    monkeypatch.setattr(gui, "QSettings", lambda *_: settings)
     widget = gui.MainWindow()
     widget.show()
     app.processEvents()
@@ -75,6 +77,45 @@ def test_comparison_ready_state(window, tmp_path):
     assert window.play_button.isEnabled()
     assert "ready" in window.compare_hint.text()
 
+def test_legacy_comparisons_choose_different_versions(window, tmp_path):
+    window.variants = {"original": tmp_path / "a.wav", "reference": tmp_path / "b.wav"}
+    window._set_comparison_enabled(True)
+    assert window.a_combo.currentText() == "original"
+    assert window.b_combo.currentText() == "reference"
+    window._set_comparison_enabled(False)
+    assert window.a_combo.count() == window.b_combo.count() == 0
+
+
+def test_queue_append_preserves_rows_and_removal_keeps_source(window, tmp_path):
+    first, second, third = [tmp_path / name for name in ("one.wav", "two.wav", "three.wav")]
+    second.touch()
+    window._set_sources([first, second])
+    window.queue_table.setCurrentCell(1, 0)
+    window._update_item_status(0, "Complete", "First export")
+    window._set_sources([first, third], append=True)
+    assert window.sources == [first, second, third]
+    assert window._selected_source() == second
+    assert window.queue_table.item(0, 1).text() == "Complete"
+    window.remove_button.click()
+    assert window.sources == [first, third]
+    assert window._selected_source() == third
+    assert second.is_file()
+    assert window.process_button.text() == "Clean 2 files"
+
+
+def test_remembers_volume_and_existing_output_folder(window, tmp_path):
+    destination = tmp_path / "cleaned"
+    destination.mkdir()
+    window.output_edit.setText(str(destination))
+    window.volume_slider.setValue(28)
+    window.close()
+    reopened = gui.MainWindow()
+    try:
+        assert reopened.output_edit.text() == str(destination)
+        assert reopened.volume_slider.value() == 28
+    finally:
+        reopened.close()
+
 
 def test_outgoing_media_status_does_not_consume_resume_request(window):
     window.changing_source = True
@@ -111,7 +152,8 @@ def test_blank_destination_has_helpful_error(window, tmp_path, monkeypatch):
     messages = []
     monkeypatch.setattr(gui.QMessageBox, "warning", lambda *args: messages.append(args[1]))
     window._start_processing()
-    assert messages == ["Choose a save folder"]
+    window.open_output.click()
+    assert messages == ["Choose a save folder", "Choose a save folder"]
     assert window.thread is None
 
 
@@ -176,3 +218,26 @@ def test_clean_button_runs_worker_with_selected_options(window, tmp_path, monkey
     assert window.queue_table.item(0, 1).text() == "Complete"
     assert window.process_button.isEnabled()
     assert "1 complete" in window.status_label.text()
+
+
+def test_missing_recording_does_not_shift_queue_status(window, tmp_path, monkeypatch):
+    from src import main
+
+    missing, valid = tmp_path / "missing.wav", tmp_path / "valid.wav"
+    valid.write_bytes(b"recording")
+    monkeypatch.setattr(main, "probe_media", lambda *_: {"audio_streams": 1})
+    errors = []
+    monkeypatch.setattr(gui.QMessageBox, "critical", lambda *args: errors.append(args[2]))
+    window._set_sources([missing, valid])
+    window.output_edit.setText(str(tmp_path / "out"))
+    window.strength_spin.setValue(0)
+    monkeypatch.setattr(gui, "create_session_logger", lambda *_: (logging.getLogger("gui.missing"), tmp_path / "batch.log"))
+    window.process_button.click()
+    for _ in range(500):
+        QTest.qWait(10)
+        if window.thread is None:
+            break
+    assert window.thread is None
+    assert errors == []
+    assert window.queue_table.item(0, 1).text() == "Failed"
+    assert window.queue_table.item(1, 1).text() == "Complete"

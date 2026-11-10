@@ -98,6 +98,8 @@ def save_batch_report(log_path: Path, results: list[dict[str, Any]], cancelled: 
 
 def process_video(video: Path, output_dir: Path, preset_name: str, engine_name: str, logger: logging.Logger, keep_temp: bool, overwrite: bool, strength_percent: int | None = None, audio_track: int = 0, audio_only: bool = False) -> dict[str, Any]:
     """Process in a private staging folder; publish only validated final outputs."""
+    if not video.is_file():
+        raise FileNotFoundError(f"Recording is missing or unavailable: {video}")
     strength = validate_strength(strength_percent) if strength_percent is not None else None
     effective_audio_only = audio_only or (video.suffix.lower() in AUDIO_EXTENSIONS and strength != 0)
     target = clean_audio_output_path(video, output_dir) if effective_audio_only else clean_output_path(video, output_dir)

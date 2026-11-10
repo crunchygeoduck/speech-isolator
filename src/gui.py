@@ -9,8 +9,8 @@ from typing import Any
 
 import numpy as np
 import soundfile as sf
-from PySide6.QtCore import QObject, QSignalBlocker, Qt, QThread, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QColor, QCloseEvent, QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QPainter, QPen, QResizeEvent
+from PySide6.QtCore import QObject, QSettings, QSignalBlocker, Qt, QThread, QTimer, QUrl, Signal, Slot
+from PySide6.QtGui import QColor, QCloseEvent, QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QKeySequence, QPainter, QPen, QResizeEvent, QShortcut
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import (
     QApplication,
@@ -249,8 +249,10 @@ class MainWindow(QMainWindow):
         self.preview_timer.setInterval(400)
         self.preview_timer.timeout.connect(self._render_preview)
 
+        self.settings = QSettings("Local Tools", "Factory Speech Cleaner")
         self.audio_output = QAudioOutput(self)
-        self.audio_output.setVolume(0.85)
+        volume = self.settings.value("playback/volume", 85, type=int)
+        self.audio_output.setVolume(min(100, max(0, volume)) / 100)
         self.player = QMediaPlayer(self)
         self.player.setAudioOutput(self.audio_output)
         self.player.positionChanged.connect(self._position_changed)
@@ -265,7 +267,7 @@ class MainWindow(QMainWindow):
         gpu = hardware.get("gpu") or "No NVIDIA GPU detected"
         mode = "CUDA" if hardware.get("cuda_available") else "CPU"
         self.hardware_label.setText(f"GPU: {gpu}  |  AI runtime: {mode}  |  Reference engine: Smooth-context 48 kHz")
-        self.status_label.setText("Ready · Select files or drop a folder into this window.")
+        self.status_label.setText("Ready · Add files or drop a folder into this window.")
 
     def _build_ui(self) -> None:
         self.tabs = QTabWidget()
@@ -291,9 +293,11 @@ class MainWindow(QMainWindow):
 
         setup = self._section("Processing queue")
         queue_actions = QHBoxLayout()
-        self.file_button = QPushButton("Select files…")
+        self.file_button = QPushButton("Add files…")
+        self.file_button.setShortcut(QKeySequence("Ctrl+O"))
+        self.file_button.setToolTip("Add recordings to the queue (Ctrl+O)")
         self.file_button.clicked.connect(self._browse_input)
-        self.folder_button = QPushButton("Select folder…")
+        self.folder_button = QPushButton("Add folder…")
         self.folder_button.clicked.connect(self._browse_input_folder)
         queue_actions.addWidget(self.file_button)
         queue_actions.addWidget(self.folder_button)
@@ -321,6 +325,14 @@ class MainWindow(QMainWindow):
         self.queue_table.setMinimumHeight(180)
         self.queue_table.currentCellChanged.connect(self._queue_cell_changed)
         setup.layout().addWidget(self.queue_table, 1)
+        self.remove_button = QPushButton("Remove selected")
+        self.remove_button.setToolTip("Remove the selected recording from the queue (Delete while the queue is focused)")
+        self.remove_button.setEnabled(False)
+        self.remove_button.clicked.connect(self._remove_selected_source)
+        remove_shortcut = QShortcut(QKeySequence("Delete"), self.queue_table)
+        remove_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        remove_shortcut.activated.connect(self.remove_button.click)
+        setup.layout().addWidget(self.remove_button, alignment=Qt.AlignmentFlag.AlignLeft)
         queue_column.addWidget(setup, 1)
 
         compare = self._section("Selected file")
@@ -343,7 +355,7 @@ class MainWindow(QMainWindow):
         self.strength_slider.setTickInterval(10)
         self.strength_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.strength_slider.setAccessibleName("Voice isolation strength")
-        self.strength_slider.setToolTip("0 is an exact original copy. 50 is the approved Reference. 100 applies maximum isolation.")
+        self.strength_slider.setToolTip("0 bypasses cleanup. 50 is the approved Reference. 100 applies maximum isolation.")
         self.strength_spin = QSpinBox()
         self.strength_spin.setRange(0, 100)
         self.strength_spin.setValue(50)
@@ -364,7 +376,9 @@ class MainWindow(QMainWindow):
 
         setup = self._section("Export settings")
         destination = QHBoxLayout()
-        self.output_edit = QLineEdit(str(PROJECT_ROOT / "output"))
+        saved_output = self.settings.value("export/folder", "", type=str)
+        output = Path(saved_output) if saved_output and Path(saved_output).is_dir() else PROJECT_ROOT / "output"
+        self.output_edit = QLineEdit(str(output))
         self.output_edit.setAccessibleName("Output folder path")
         self.output_button = QPushButton("Browse…")
         self.output_button.clicked.connect(self._browse_output)
@@ -409,7 +423,7 @@ class MainWindow(QMainWindow):
         self.audio_only_check.setToolTip("Create a 48 kHz WAV instead of recombining the audio with video.")
         options.addWidget(self.audio_only_check, 1, 0, 1, 2)
         advanced.addLayout(options)
-        advanced.addWidget(self._hint("Leave track 1 selected unless your video has several audio tracks. Audio-only export removes the video from the saved result. At strength 0, the source is copied unchanged instead."))
+        advanced.addWidget(self._hint("Leave track 1 selected unless your video has several audio tracks. Audio-only export saves a WAV, including at strength 0."))
 
         excerpt = QGridLayout()
         excerpt.addWidget(QLabel("Sample start"), 0, 0)
@@ -446,6 +460,8 @@ class MainWindow(QMainWindow):
         queue_column.addWidget(setup)
 
         self.preview_button = QPushButton("Prepare preview")
+        self.preview_button.setShortcut(QKeySequence("Ctrl+P"))
+        self.preview_button.setToolTip("Prepare the selected recording for listening (Ctrl+P)")
         self.preview_button.setEnabled(False)
         self.preview_button.clicked.connect(self._prepare_preview)
         compare.layout().addWidget(self.preview_button)
@@ -488,6 +504,8 @@ class MainWindow(QMainWindow):
 
         transport = QHBoxLayout()
         self.play_button = QPushButton("Play")
+        self.play_button.setShortcut(QKeySequence("Ctrl+Space"))
+        self.play_button.setToolTip("Play or pause the listening sample (Ctrl+Space)")
         self.play_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
         self.play_button.setEnabled(False)
         self.play_button.clicked.connect(self._toggle_playback)
@@ -583,12 +601,13 @@ class MainWindow(QMainWindow):
     def _build_guide(self) -> None:
         layout = self._page("How to use")
         sections = (
-            ("Quick start", "1. Select files or a folder in Control Room.\n2. Select a row, leave strength at 50 and click Prepare preview.\n3. Press Play in the Selected file panel. Use Listen A and Listen B to switch versions at the same position.\n4. Adjust Cleanup strength to update the live preview on side B.\n5. Check the destination and click Clean files to export the entire queue."),
+            ("Quick start", "1. Add files or a folder in Control Room.\n2. Select a row, leave strength at 50 and click Prepare preview.\n3. Press Play in the Selected file panel. Use Listen A and Listen B to switch versions at the same position.\n4. Adjust Cleanup strength to update the live preview on side B.\n5. Check the destination and click Clean files to export the entire queue."),
+            ("Keyboard shortcuts", "Ctrl+O adds recordings. Ctrl+P prepares the selected recording. Ctrl+Space plays or pauses a sample. Press Delete while the queue is focused to remove the selected row."),
             ("Preview and A/B listening", "Preview processes a 10-second excerpt of the selected recording. Change the excerpt in advanced options. Live preview follows Cleanup strength after a short pause. Original plays the source recording, Reference 50 uses the approved baseline, and Previous Reference uses the earlier engine. Switching recordings or changing the excerpt requires preparing again. Playback volume affects only the player. Exports calculate loudness over the full recording."),
-            ("What does strength do?", "0 makes an exact copy without audio processing, even when audio-only export is selected.\n1–49 keeps more of the original sound.\n50 uses the approved Reference baseline.\n51–100 applies stronger cleanup and may affect voice detail.\nTry changes of 5–10 points and listen again."),
+            ("What does strength do?", "0 bypasses cleanup. The app copies the original file or extracts an unprocessed WAV if audio-only export is selected.\n1–49 keeps more of the original sound.\n50 uses the approved Reference baseline.\n51–100 applies stronger cleanup and may affect voice detail.\nTry changes of 5–10 points and listen again."),
             ("How the cleanup works", "A local speech model estimates which parts of the recording belong to speech and reduces other sound. The app then adjusts the result for listening. Detail recovery optionally blends a second model's estimate to try to retain more speech detail. It is experimental and slower. Neither mode can guarantee perfect separation or restore every missing word."),
             ("Full exports versus previews", "Clean files processes each full recording with the current settings. If Save A/B samples is enabled, the app saves comparison clips from the first file. Select that file in the queue to hear them. Saved comparison clips are fixed. Use Prepare preview to return to live tuning."),
-            ("Cleaning a folder", "Select folder includes supported audio and video directly inside the folder. Every file uses the same settings and audio-track number. Use a separate destination. Save A/B samples defaults off for multiple files. Stop after this file lets the active file finish and leaves the remaining files queued."),
+            ("Managing the queue", "Add folder includes supported audio and video directly inside the folder. Files and folders add to the queue. Remove selected takes a recording out of the queue and keeps the original on disk. Every file uses the same settings and audio-track number. Stop after this file lets the active file finish and leaves the remaining files queued."),
             ("Where are my results?", "Click Open cleaned files in Session. Results have CLEAN in their filename. Audio inputs export as WAV, and videos normally retain their picture with cleaned audio. Existing results are skipped unless Replace existing CLEAN files is checked. To keep several versions, choose a different destination for each run."),
             ("Which advanced options do I need?", "Usually none. Detail recovery tries to retain more voice detail using two models. Source audio track chooses an embedded track in a video—not the left or right speaker; leave it at 1 unless you know otherwise. Listening sample start and length choose the section used for comparison. Replace existing CLEAN files allows you to redo previously saved results."),
             ("Troubleshooting and sound quality", "Tinny, metallic or missing speech: lower strength and try Detail recovery both off and on.\nToo much background noise: raise strength a little and check that words remain clear.\nSkipped: a cleaned result already exists; use a new folder or enable replacement.\nReview: fallback: the main isolation step did not succeed; listen carefully before using that result.\nFailed: expand technical details, check the file and destination, then retry.\nSlow processing: local models can take time, especially with Detail recovery. The app stays usable while work runs."),
@@ -657,9 +676,10 @@ class MainWindow(QMainWindow):
     @Slot()
     def _browse_input(self) -> None:
         patterns = " ".join(f"*{extension}" for extension in sorted(SUPPORTED_EXTENSIONS))
-        selected, _ = QFileDialog.getOpenFileNames(self, "Select audio or video files", str(PROJECT_ROOT), f"Audio and video ({patterns})")
+        start = self._selected_source()
+        selected, _ = QFileDialog.getOpenFileNames(self, "Add audio or video files", str(start.parent if start else PROJECT_ROOT), f"Audio and video ({patterns})")
         if selected:
-            self._set_sources([Path(item) for item in selected])
+            self._set_sources([Path(item) for item in selected], append=True)
 
     @Slot()
     def _browse_input_folder(self) -> None:
@@ -673,7 +693,7 @@ class MainWindow(QMainWindow):
             if not sources:
                 QMessageBox.information(self, "No media found", "That folder contains no supported audio or video files.")
                 return
-            self._set_sources(sources)
+            self._set_sources(sources, append=True)
 
     @Slot()
     def _browse_output(self) -> None:
@@ -684,7 +704,7 @@ class MainWindow(QMainWindow):
     @Slot(int)
     def _strength_changed(self, value: int) -> None:
         if value == 0:
-            copy = "No audio processing. The output is an exact copy of the source file."
+            copy = "No cleanup. Saves an exact copy, or an unprocessed WAV in audio-only mode."
         elif value < 50:
             copy = "Gentler cleanup. Keeps more original sound; try this if the voice sounds unnatural."
         elif value == 50:
@@ -711,6 +731,8 @@ class MainWindow(QMainWindow):
         self.preview_active = False
         self.preview_timer.stop()
         self.preview_status.setText("Prepare a preview to hear the selected recording.")
+        self.pending_position = 0
+        self.resume_after_switch = False
         self.player.stop()
         self.player.setSource(QUrl())
         self.variants = {}
@@ -776,20 +798,14 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _start_processing(self) -> None:
-        if self.preview_thread:
+        if self.preview_thread or self.thread:
             return
-        sources = [path for path in self.sources if path.is_file()]
+        sources = list(self.sources)
         if not sources:
             QMessageBox.warning(self, "Queue is empty", "Select audio/video files or a folder to process.")
             return
-        if not self.output_edit.text().strip():
-            QMessageBox.warning(self, "Choose a save folder", "Choose where you want to save the cleaned files.")
-            return
-        output = Path(self.output_edit.text().strip())
-        try:
-            output.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            QMessageBox.warning(self, "Cannot use this save folder", f"Choose a folder you can write to.\n\n{exc}")
+        output = self._ensure_output_directory()
+        if output is None:
             return
         self.player.stop()
         self.preview_active = False
@@ -894,33 +910,64 @@ class MainWindow(QMainWindow):
     def _update_item_status(self, row: int, status: str, detail: str) -> None:
         if 0 <= row < self.queue_table.rowCount():
             self.queue_table.setItem(row, 1, QTableWidgetItem(status))
-            self.queue_table.setItem(row, 2, QTableWidgetItem(detail))
+            item = QTableWidgetItem(detail)
+            item.setToolTip(detail)
+            self.queue_table.setItem(row, 2, item)
 
-    def _set_sources(self, sources: list[Path]) -> None:
-        unique: list[Path] = []
-        seen: set[Path] = set()
+    def _set_sources(self, sources: list[Path], *, append: bool = False) -> None:
+        existing = self.sources if append else []
+        unique = existing.copy()
+        seen = set(existing)
         for source in sources:
             resolved = source.resolve()
             if resolved not in seen:
                 seen.add(resolved)
                 unique.append(resolved)
+        if append and len(unique) == len(existing):
+            self.status_label.setText("Those recordings are already queued.")
+            return
         self.sources = unique
-        self.process_button.setEnabled(bool(unique))
-        self.process_button.setText(f"Clean {len(unique)} file{'s' if len(unique) != 1 else ''}" if unique else "Clean files")
-        self.queue_count.setText(f"{len(unique)} file{'s' if len(unique) != 1 else ''}")
+        self._update_queue_count()
+        select_first = not append or self.queue_table.currentRow() < 0
         with QSignalBlocker(self.queue_table):
             self.queue_table.setRowCount(len(unique))
-            for row, source in enumerate(unique):
+            for row, source in enumerate(unique[len(existing):], start=len(existing)):
                 recording = QTableWidgetItem(source.name)
                 recording.setToolTip(str(source))
                 self.queue_table.setItem(row, 0, recording)
                 self._update_item_status(row, "Waiting", str(source.parent))
-            if unique:
+            if unique and select_first:
                 self.queue_table.setCurrentCell(0, 0)
-        self.comparison_check.setChecked(len(unique) == 1)
+        if not append or len(existing) < 2:
+            self.comparison_check.setChecked(len(unique) == 1)
         if unique:
             self.tabs.setCurrentIndex(0)
+        if select_first:
+            self._queue_selection_changed()
+        if append:
+            added = len(unique) - len(existing)
+            self.status_label.setText(f"Added {added} recording{'s' if added != 1 else ''} to the queue.")
+
+    def _update_queue_count(self) -> None:
+        count = len(self.sources)
+        files = f"{count} file{'s' if count != 1 else ''}"
+        self.queue_count.setText(files)
+        self.process_button.setText(f"Clean {files}" if count else "Clean files")
+        self.process_button.setEnabled(bool(count))
+
+    @Slot()
+    def _remove_selected_source(self) -> None:
+        row = self.queue_table.currentRow()
+        if self.thread or self.preview_thread or not 0 <= row < len(self.sources):
+            return
+        source = self.sources.pop(row)
+        with QSignalBlocker(self.queue_table):
+            self.queue_table.removeRow(row)
+            if self.sources:
+                self.queue_table.setCurrentCell(min(row, len(self.sources) - 1), 0)
+        self._update_queue_count()
         self._queue_selection_changed()
+        self.status_label.setText(f"Removed {source.name} from the queue.")
 
     def _selected_source(self) -> Path | None:
         row = self.queue_table.currentRow()
@@ -936,6 +983,7 @@ class MainWindow(QMainWindow):
         self._invalidate_preview()
         source = self._selected_source()
         self.preview_button.setEnabled(source is not None)
+        self.remove_button.setEnabled(source is not None)
         self.selected_file_label.setText(source.name if source else "No recording selected")
         self.selected_file_label.setToolTip(str(source) if source else "")
         if source:
@@ -954,6 +1002,7 @@ class MainWindow(QMainWindow):
             widget.setEnabled(enabled)
         self.strength_slider.setEnabled(enabled)
         self.strength_spin.setEnabled(enabled)
+        self.remove_button.setEnabled(enabled and self._selected_source() is not None)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         paths = [Path(url.toLocalFile()) for url in event.mimeData().urls() if url.isLocalFile()]
@@ -975,7 +1024,7 @@ class MainWindow(QMainWindow):
             elif path.suffix.lower() in SUPPORTED_EXTENSIONS:
                 sources.append(path)
         if sources:
-            self._set_sources(sources)
+            self._set_sources(sources, append=True)
             event.acceptProposedAction()
 
     def _load_manifest_for(self, source: Path) -> None:
@@ -999,18 +1048,20 @@ class MainWindow(QMainWindow):
         self.compare_hint.setText("Listening samples are ready. Use A/B to compare the same moment." if enabled else "")
         if not enabled:
             self.waveform.set_audio(None)
-        if enabled:
-            labels = list(self.variants)
-            for combo in (self.a_combo, self.b_combo):
-                current = combo.currentText()
-                combo.blockSignals(True)
+        labels = list(self.variants) if enabled else []
+        if labels:
+            original = next((label for label in labels if label.casefold() == "original"), labels[0])
+            alternatives = [label for label in labels if self.variants[label] != self.variants[original]]
+            reference = next((label for label in alternatives if label.casefold() in ("reference 50", "reference")),
+                             alternatives[0] if alternatives else original)
+            preferred = next((label for label in alternatives if label.casefold().startswith("selected")), reference)
+        else:
+            original = preferred = ""
+        for combo, selection in ((self.a_combo, original), (self.b_combo, preferred)):
+            with QSignalBlocker(combo):
                 combo.clear()
                 combo.addItems(labels)
-                combo.setCurrentText(current if current in labels else labels[0])
-                combo.blockSignals(False)
-            self.a_combo.setCurrentText("Original")
-            preferred = next((label for label in labels if label.startswith("Selected")), "Reference 50")
-            self.b_combo.setCurrentText(preferred)
+                combo.setCurrentText(selection)
         for widget in (self.a_combo, self.b_combo, self.a_button, self.b_button, self.play_button, self.seek):
             widget.setEnabled(enabled)
 
@@ -1024,8 +1075,8 @@ class MainWindow(QMainWindow):
         path = self._variant_for_side(side)
         if not path or not path.is_file():
             return
-        position = self.player.position()
-        resume = self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        position = self.pending_position or self.player.position()
+        resume = self.resume_after_switch or self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
         self.changing_source = True
         self.player.stop()
         self.pending_position = position
@@ -1097,11 +1148,24 @@ class MainWindow(QMainWindow):
         if error != QMediaPlayer.Error.NoError:
             self.status_label.setText(f"Audio playback error: {message}")
 
+    def _ensure_output_directory(self) -> Path | None:
+        path = self.output_edit.text().strip()
+        if not path:
+            QMessageBox.warning(self, "Choose a save folder", "Choose where you want to save the cleaned files.")
+            return None
+        folder = Path(path)
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            return folder.resolve()
+        except OSError as exc:
+            QMessageBox.warning(self, "Cannot use this save folder", f"Choose a folder you can write to.\n\n{exc}")
+            return None
+
     @Slot()
     def _open_output_folder(self) -> None:
-        folder = Path(self.output_edit.text())
-        folder.mkdir(parents=True, exist_ok=True)
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder.resolve())))
+        folder = self._ensure_output_directory()
+        if folder is not None and not QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))):
+            QMessageBox.warning(self, "Cannot open folder", f"Open this folder in File Explorer:\n{folder}")
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if self.preview_thread or (self.thread and self.thread.isRunning()):
@@ -1112,6 +1176,10 @@ class MainWindow(QMainWindow):
         self.player.setSource(QUrl())
         self.preview_timer.stop()
         self.preview_cache.close()
+        self.settings.setValue("playback/volume", self.volume_slider.value())
+        destination = self.output_edit.text().strip()
+        if destination and Path(destination).is_dir():
+            self.settings.setValue("export/folder", str(Path(destination).resolve()))
         event.accept()
 
 

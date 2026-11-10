@@ -6,7 +6,9 @@ Factory Speech Cleaner is a Windows desktop app for isolating speech in audio an
 
 Clone the repository or download the source ZIP from [Releases](https://github.com/crunchygeoduck/speech-isolator/releases). Follow the setup below to install the dependencies from their upstream providers, run the app, or build a portable Windows folder.
 
-Select a file or folder, choose a row, and use **Prepare preview** to listen at strength 50. Adjust strength while listening, then use **Clean files** to export the queue. Strength 0 makes an exact copy. The volume slider controls only playback.
+Add files or folders to build a queue, choose a row, and use **Prepare preview** to listen at strength 50. Use **Remove selected** to take out a row. Adjust strength while listening, then use **Clean files** to export the queue. Strength 0 bypasses cleanup. Audio-only mode still extracts a WAV. The app remembers playback volume and the existing output folder across sessions.
+
+Use **Ctrl+O** to add files, **Ctrl+P** to prepare a preview, and **Ctrl+Space** to play or pause. **Delete** removes the selected row when the queue has keyboard focus.
 
 ## Run from source
 
